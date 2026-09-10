@@ -47,6 +47,7 @@ type featureRuntimeConfig struct {
 	desensitizeSource  string
 	matcher            *desensitizeMatcher
 	oauthClientMode    string
+	oauthRegion        string
 	enterpriseCredits  bool
 	configuredModels   []string
 }
@@ -76,6 +77,7 @@ type featureConfigYAML struct {
 	Desensitize       *bool     `yaml:"desensitize"`
 	DesensitizeTerms  *[]string `yaml:"desensitize_terms"`
 	OAuthClientMode   string    `yaml:"oauth_client_mode"`
+	OAuthRegion       string    `yaml:"oauth_region"`
 	EnterpriseCredits *bool     `yaml:"enterprise_credits"`
 	Models            yaml.Node `yaml:"models"`
 }
@@ -99,6 +101,11 @@ func parseFeatureRuntime(raw []byte) (*featureRuntimeConfig, error) {
 		return nil, errors.New("oauth_client_mode must be cli or workbuddy")
 	}
 
+	region := strings.ToLower(strings.TrimSpace(doc.OAuthRegion))
+	if region != "" && region != oauthRegionCN && region != oauthRegionGlobal {
+		return nil, errors.New("oauth_region must be cn or global")
+	}
+
 	terms, source, err := normalizedDesensitizeTerms(doc.DesensitizeTerms)
 	if err != nil {
 		return nil, err
@@ -117,6 +124,7 @@ func parseFeatureRuntime(raw []byte) (*featureRuntimeConfig, error) {
 		desensitizeSource:  source,
 		matcher:            matcher,
 		oauthClientMode:    mode,
+		oauthRegion:        region,
 		enterpriseCredits:  doc.EnterpriseCredits != nil && *doc.EnterpriseCredits,
 		configuredModels:   models,
 	}, nil

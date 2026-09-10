@@ -188,8 +188,6 @@ button .spin{border-color:var(--on-acc);border-top-color:transparent}
   </div>
   <div class="bar">
     <button class="sec" id="importBtn" onclick="openImportModal()">导入凭证</button>
-    <button class="sec" id="loginCnBtn" onclick="startLogin('cn',this)" title="copilot.tencent.com 国内账号">国内登录</button>
-    <button class="sec" id="loginGlobalBtn" onclick="startLogin('global',this)" title="www.workbuddy.ai 国际账号">国际登录</button>
     <button class="sec" onclick="openDesensitizeModal()">屏蔽词设置</button>
     <button id="refreshBtn" onclick="load(true,this)">刷新数据</button>
     <button class="sec" onclick="checkinAll(this)">全部签到</button>
@@ -702,35 +700,6 @@ async function api(path, opts={}){
   rejectPanelAuth(r);
   authFailCount=0;
   return readPanelResponse(r);
-}
-async function startLogin(region, btn){
-  busy(btn, true);
-  try{
-    const d = await api("/login/start?region=" + encodeURIComponent(region), {method:"POST"});
-    let url = (d && (d.url || d.URL)) || "";
-    // CPA html-sanitises JSON string values, so "&" arrives as "&amp;".
-    url = url.replace(/&amp;/g, "&");
-    const state = (d && (d.state || d.State)) || "";
-    if(!url){ toast("获取登录链接失败", "err"); return; }
-    try{ await navigator.clipboard.writeText(url); }catch(_){}
-    toast("已打开授权页（链接已复制），请 5 分钟内完成登录", "ok");
-    window.open(url, "_blank");
-    let done = false;
-    for(let i = 0; i < 60; i++){
-      await new Promise(r => setTimeout(r, 5000));
-      try{
-        const p = await api("/login/poll?state=" + encodeURIComponent(state), {method:"POST"});
-        const st = (p && (p.status || p.Status)) || "";
-        if(st === "success"){ done = true; toast("登录成功，正在刷新", "ok"); await load(false, btn); break; }
-        if(st === "error"){ toast((p.message || p.Message) || "登录失败", "err"); break; }
-      }catch(_){}
-    }
-    if(!done){ toast("登录未完成或已超时", "err"); }
-  }catch(e){
-    toast("登录失败：" + ((e && e.message) || ""), "err");
-  }finally{
-    busy(btn, false);
-  }
 }
 function updateModelStatus(status){
   const el=document.getElementById("modelStatus");

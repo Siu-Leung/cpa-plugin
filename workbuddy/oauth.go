@@ -132,6 +132,11 @@ func oauthProfileForMode(mode string) oauthRequestProfile {
 	}
 }
 
+const (
+	oauthRegionCN     = "cn"
+	oauthRegionGlobal = "global"
+)
+
 // oauthProfileForRegion builds a login profile for an explicit region.
 // "" / "cn" -> copilot.tencent.com, "global" -> www.workbuddy.ai. Both
 // gateways expose identical /v2/plugin/auth/* endpoints.
@@ -254,16 +259,25 @@ func handleStartLogin(raw []byte) ([]byte, error) {
 		mode = features.oauthClientMode
 	}
 	profile := oauthProfileForMode(mode)
-	// Optional explicit region override (used by the panel's CN/Global
-	// login buttons): {"region":"cn"} or {"region":"global"}.
+	// Region selection for the *official* CPA OAuth entry (/v0/management/
+	// <provider>-auth-url): honour the oauth_region config so the same entry
+	// can authorise CN or Global accounts. An explicit {"region":...} in the
+	// request still wins when present.
+	region := ""
+	if features := currentFeatureRuntime(); features != nil {
+		region = strings.ToLower(strings.TrimSpace(features.oauthRegion))
+	}
 	var regionReq struct {
 		Region string `json:"region"`
 	}
 	if len(raw) > 0 {
 		_ = json.Unmarshal(raw, &regionReq)
 	}
-	if r := strings.TrimSpace(regionReq.Region); r != "" {
-		profile = oauthProfileForRegion(r)
+	if r := strings.ToLower(strings.TrimSpace(regionReq.Region)); r != "" {
+		region = r
+	}
+	if region != "" {
+		profile = oauthProfileForRegion(region)
 	}
 	stateReq, err := buildAuthStateRequest(profile)
 	if err != nil {
