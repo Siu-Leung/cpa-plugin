@@ -6,6 +6,24 @@
 
 [English → README.md](README.md)
 
+
+> **Fork 说明** — 本项目是
+> [Sliverkiss/cpa-plugin](https://github.com/Sliverkiss/cpa-plugin) 的维护分支
+> （上游已归档）。相对上游 `0.9.3` 的改动：
+>
+> - **新增 `oauth_region` 配置项。** CPA **官方** OAuth 登录入口
+>   （`management.html#/oauth`，即 `GET /v0/management/workbuddy-auth-url`）
+>   会按所选区域生成授权链接：`cn` → `copilot.tencent.com`（默认），
+>   `global` → `www.workbuddy.ai`。
+>   WorkBuddy 面板提供同样的切换控件（「OAuth 区域：国内 / 国际」），
+>   它通过 CPA 自带的插件配置接口
+>   （`PATCH /v0/management/plugins/workbuddy/config`）写入该配置项。
+>   **登录流程与凭据保存完全由 CPA 核心负责，插件不再自带任何登录流程。**
+> - **修复 Global 区域识别。** `workBuddyRealmFromAccessToken()` 只匹配
+>   `workbuddy.ai`，而 Global 令牌的 `iss` 是
+>   `https://www.workbuddy.ai/auth/realms/copilot`。主机名不匹配会让这些账号
+>   的模型目录拉取失败（`auth_invalid`，面板显示「模型目录不可用」）。
+>   现已与 `billing.go` 的 `isGlobalDomain()` 行为对齐。
 ## 功能
 
 - **OAuth 登录** — 通过宿主 auth store 管理多账号 `workbuddy-<uid>.json`，
@@ -80,11 +98,42 @@ curl http://localhost:8317/v1/chat/completions \
   }'
 ```
 
+## 登录区域切换（国内 / 国际）
+
+插件只提供**一个**官方 OAuth 入口，登录前先选好区域：
+
+1. 打开 WorkBuddy 面板：`/v0/resource/plugins/workbuddy/panel`
+2. 点工具栏上的 **「OAuth 区域：国内 / 国际」**。它只是通过 CPA 的插件配置
+   接口写入 `oauth_region`，不做别的事。
+3. 打开 CPA **官方** OAuth 页面（`management.html#/oauth`），点
+   *开始 workbuddy 登录*。此时授权链接会指向所选区域
+   （`copilot.tencent.com` 或 `www.workbuddy.ai`）。
+4. 在浏览器完成登录，凭据由 CPA 核心保存。
+
+等价于直接改配置：
+
+```yaml
+plugins:
+  configs:
+    workbuddy:
+      oauth_region: "cn"      # 或 "global"
+```
+
+切换不会改动任何已有账号，只影响下一次从官方入口发起的登录。
+
 ## 配置项
 
 全部字段可选，位于 `plugins.configs.workbuddy` 下。
 
 ```yaml
+      # 官方 OAuth 登录入口使用的区域
+      # （management.html#/oauth → GET /v0/management/workbuddy-auth-url）
+      #   cn     → copilot.tencent.com（默认）
+      #   global → www.workbuddy.ai
+      # 只影响下一次从该入口发起的登录，不影响已有账号。
+      # 面板上的「OAuth 区域：国内 / 国际」等价于修改此字段。
+      oauth_region: "cn"
+
 plugins:
   configs:
     workbuddy:

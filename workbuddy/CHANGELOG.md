@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.9.4
+
+### Region-selectable official OAuth entry
+
+- Add `oauth_region` config field (`cn` default | `global`). The official CPA
+  OAuth entry (`management.html#/oauth` → `GET
+  /v0/management/workbuddy-auth-url`) now builds the authorisation URL for the
+  configured realm: `cn` → `copilot.tencent.com`, `global` → `www.workbuddy.ai`.
+  Login and credential persistence remain owned by CPA core.
+- Panel: "OAuth 区域：国内 / 国际" switch that writes `oauth_region` through
+  CPA's plugin-config API (`PATCH /v0/management/plugins/<id>/config`), the same
+  mechanism already used for the desensitize settings.
+
+### Global realm detection fix
+
+- `workBuddyRealmFromAccessToken()` only accepted the `workbuddy.ai` issuer
+  host, so Global credentials (`iss = https://www.workbuddy.ai/auth/realms/copilot`)
+  fell through to the unsupported-host branch and surfaced as `auth_invalid`
+  ("模型目录不可用") during model-catalog discovery. Now accepts
+  `www.workbuddy.ai` as well, matching `billing.go`'s `isGlobalDomain()`.
+
+### Fork maintenance
+
+- `registry.json` repository/homepage point at this fork.
+
 ## 0.9.3
 
 ### Dynamic model bootstrap

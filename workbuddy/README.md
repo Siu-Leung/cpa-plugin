@@ -8,6 +8,24 @@ built-in management dashboard.
 
 [中文文档 → README_CN.md](README_CN.md)
 
+> **Fork note** — maintained fork of
+> [Sliverkiss/cpa-plugin](https://github.com/Sliverkiss/cpa-plugin) (upstream
+> has been archived). Changes on top of upstream `0.9.3`:
+>
+> - **`oauth_region` config field.** The *official* CPA OAuth entry
+>   (`management.html#/oauth`, i.e. `GET /v0/management/workbuddy-auth-url`)
+>   now builds the authorisation URL for the selected realm:
+>   `cn` → `copilot.tencent.com` (default), `global` → `www.workbuddy.ai`.
+>   The WorkBuddy panel exposes the same switch (「OAuth 区域：国内 / 国际」),
+>   which writes this field through CPA's own plugin-config API
+>   (`PATCH /v0/management/plugins/workbuddy/config`). Login and credential
+>   persistence stay entirely with CPA core — the plugin adds no login flow.
+> - **Global realm detection fix.** `workBuddyRealmFromAccessToken()` matched
+>   only `workbuddy.ai`, but Global access tokens carry
+>   `iss = https://www.workbuddy.ai/auth/realms/copilot`. The host mismatch made
+>   those accounts fail model-catalog discovery with `auth_invalid`
+>   ("模型目录不可用"). Now aligned with `billing.go`'s `isGlobalDomain()`.
+
 ## Features
 
 - **OAuth login** — multi-account `workbuddy-<uid>.json` auth files via the
@@ -93,6 +111,31 @@ curl http://localhost:8317/v1/chat/completions \
   }'
 ```
 
+## Switching the login realm (CN / Global)
+
+The plugin exposes **one** official OAuth entry; pick the realm *before* you
+start a login:
+
+1. Open the WorkBuddy panel: `/v0/resource/plugins/workbuddy/panel`.
+2. Click **OAuth 区域：国内 / 国际** in the toolbar. This writes
+   `oauth_region` through CPA's plugin-config API — nothing else.
+3. Open CPA's **official** OAuth page (`management.html#/oauth`) and click
+   *开始 workbuddy 登录*. The authorisation URL now targets the selected
+   realm (`copilot.tencent.com` or `www.workbuddy.ai`).
+4. Complete the login in the browser — CPA core stores the credential.
+
+Equivalent to editing the config directly:
+
+```yaml
+plugins:
+  configs:
+    workbuddy:
+      oauth_region: "cn"      # or "global"
+```
+
+Existing auth files are never modified by the switch; it only affects the next
+login started from the official entry.
+
 ## Configuration
 
 All fields are optional and live under `plugins.configs.workbuddy`.
@@ -102,6 +145,16 @@ plugins:
   configs:
     workbuddy:
       enabled: true
+
+      # Realm used by the official CPA OAuth login entry
+      # (management.html#/oauth -> GET /v0/management/workbuddy-auth-url).
+      #   cn     -> copilot.tencent.com   (default)
+      #   global -> www.workbuddy.ai
+      # Only affects the *next* login started from that entry; existing auth
+      # files are untouched. The WorkBuddy panel has an equivalent switch
+      # ("OAuth 区域: 国内 / 国际") that PATCHes this field via CPA's
+      # plugin-config API.
+      oauth_region: "cn"
 
       # Optional authoritative model ID list. Entries must be single-line YAML strings.
       # A non-empty list is the complete catalog: WorkBuddy catalog HTTP and
