@@ -178,6 +178,8 @@ func managementRegistration() managementRegistrationResponse {
 			{Method: http.MethodPost, Path: base + "/select", Description: "Select the active account card used for chat routing (body: {auth_index})."},
 			{Method: http.MethodPost, Path: base + "/keepalive", Description: "Manually refresh access tokens for all accounts (or one with auth_index)."},
 			{Method: http.MethodGet, Path: base + "/keepalive/status", Description: "Last keepalive run summary + config."},
+			{Method: http.MethodPost, Path: base + "/login/start", Description: "Start a CN or Global OAuth login (query: region=cn|global)."},
+			{Method: http.MethodPost, Path: base + "/login/poll", Description: "Poll a pending OAuth login by state (query: state)."},
 		},
 		Resources: []resourceRoute{
 			{Path: "/panel", Menu: "WorkBuddy", Description: "WorkBuddy dashboard: credits, check-in, plan, import."},
@@ -226,6 +228,38 @@ func handleManagement(raw []byte) ([]byte, error) {
 		}))
 	case req.Method == http.MethodGet && path == base+"/accounts":
 		return okEnvelope(mgmtJSONResponse(http.StatusOK, buildDashboardExWithCallback(false, false, req.HostCallbackID)))
+	case req.Method == http.MethodPost && path == base+"/login/start":
+		region := strings.TrimSpace(req.Query.Get("region"))
+		payload, _ := json.Marshal(map[string]any{"region": region})
+		resp, errStart := handleStartLogin(payload)
+		if errStart != nil {
+			return okEnvelope(mgmtJSONResponse(http.StatusBadRequest, map[string]any{"error": errStart.Error()}))
+		}
+		var startEnv struct {
+			Result json.RawMessage `json:"result"`
+		}
+		_ = json.Unmarshal(resp, &startEnv)
+		var startOut any
+		if len(startEnv.Result) > 0 {
+			_ = json.Unmarshal(startEnv.Result, &startOut)
+		}
+		return okEnvelope(mgmtJSONResponse(http.StatusOK, startOut))
+	case req.Method == http.MethodPost && path == base+"/login/poll":
+		stateQ := strings.TrimSpace(req.Query.Get("state"))
+		payload, _ := json.Marshal(map[string]any{"state": stateQ})
+		resp, errPoll := handlePollLogin(payload)
+		if errPoll != nil {
+			return okEnvelope(mgmtJSONResponse(http.StatusBadRequest, map[string]any{"error": errPoll.Error()}))
+		}
+		var pollEnv struct {
+			Result json.RawMessage `json:"result"`
+		}
+		_ = json.Unmarshal(resp, &pollEnv)
+		var pollOut any
+		if len(pollEnv.Result) > 0 {
+			_ = json.Unmarshal(pollEnv.Result, &pollOut)
+		}
+		return okEnvelope(mgmtJSONResponse(http.StatusOK, pollOut))
 	case req.Method == http.MethodGet && path == base+"/egress-ip":
 		ip, err := fetchEgressIPWithCallback(req.HostCallbackID)
 		if err != nil {

@@ -108,6 +108,9 @@ type oauthRequestProfile struct {
 	stateURL  string
 	userAgent string
 	origin    string
+	// base is the API host used for the token / login-account endpoints
+	// (CN: copilot.tencent.com, Global: www.workbuddy.ai).
+	base string
 }
 
 func oauthProfileForMode(mode string) oauthRequestProfile {
@@ -117,6 +120,7 @@ func oauthProfileForMode(mode string) oauthRequestProfile {
 			stateURL:  upstreamBaseCN + "/v2/plugin/auth/state?platform=workbuddy",
 			userAgent: "WorkBuddy/5.3.14 WorkBuddy/5.3.14 CLI/2.115.0",
 			origin:    "https://www.workbuddy.cn",
+			base:      upstreamBaseCN,
 		}
 	}
 	return oauthRequestProfile{
@@ -124,7 +128,24 @@ func oauthProfileForMode(mode string) oauthRequestProfile {
 		stateURL:  endpointAuthState,
 		userAgent: clientUA,
 		origin:    originReferer,
+		base:      upstreamBaseCN,
 	}
+}
+
+// oauthProfileForRegion builds a login profile for an explicit region.
+// "" / "cn" -> copilot.tencent.com, "global" -> www.workbuddy.ai. Both
+// gateways expose identical /v2/plugin/auth/* endpoints.
+func oauthProfileForRegion(region string) oauthRequestProfile {
+	if strings.EqualFold(strings.TrimSpace(region), "global") {
+		return oauthRequestProfile{
+			mode:      oauthClientModeCLI,
+			stateURL:  upstreamBaseGlobal + "/v2/plugin/auth/state?platform=CLI",
+			userAgent: clientUA,
+			origin:    originRefererGlobal,
+			base:      upstreamBaseGlobal,
+		}
+	}
+	return oauthProfileForMode(oauthClientModeCLI)
 }
 
 func applyOAuthProfileHeaders(req *http.Request, profile oauthRequestProfile) {
@@ -158,7 +179,11 @@ func buildAuthStateRequest(profile oauthRequestProfile) (*http.Request, error) {
 }
 
 func buildAuthTokenRequest(profile oauthRequestProfile, state string) (*http.Request, error) {
-	req, err := http.NewRequest(http.MethodGet, endpointAuthToken+state, nil)
+	base := strings.TrimSpace(profile.base)
+	if base == "" {
+		base = upstreamBaseCN
+	}
+	req, err := http.NewRequest(http.MethodGet, base+"/v2/plugin/auth/token?state="+state, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +192,11 @@ func buildAuthTokenRequest(profile oauthRequestProfile, state string) (*http.Req
 }
 
 func buildLoginAccountRequest(profile oauthRequestProfile, state, accessToken string) (*http.Request, error) {
-	req, err := http.NewRequest(http.MethodGet, endpointLoginAcct+state, nil)
+	base := strings.TrimSpace(profile.base)
+	if base == "" {
+		base = upstreamBaseCN
+	}
+	req, err := http.NewRequest(http.MethodGet, base+"/v2/plugin/login/account?state="+state, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -225,6 +254,17 @@ func handleStartLogin(raw []byte) ([]byte, error) {
 		mode = features.oauthClientMode
 	}
 	profile := oauthProfileForMode(mode)
+	// Optional explicit region override (used by the panel's CN/Global
+	// login buttons): {"region":"cn"} or {"region":"global"}.
+	var regionReq struct {
+		Region string `json:"region"`
+	}
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &regionReq)
+	}
+	if r := strings.TrimSpace(regionReq.Region); r != "" {
+		profile = oauthProfileForRegion(r)
+	}
 	stateReq, err := buildAuthStateRequest(profile)
 	if err != nil {
 		return nil, fmt.Errorf("auth state failed: %w", err)
