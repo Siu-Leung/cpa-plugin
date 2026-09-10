@@ -188,6 +188,11 @@ button .spin{border-color:var(--on-acc);border-top-color:transparent}
   </div>
   <div class="bar">
     <button class="sec" id="importBtn" onclick="openImportModal()">导入凭证</button>
+    <span class="toggle" style="display:flex;gap:6px;align-items:center" title="官方 OAuth 登录使用的区域（management.html#/oauth）">
+      <span>OAuth 区域：</span>
+      <button class="sec" id="regionCn" onclick="setOAuthRegion('cn',this)">国内</button>
+      <button class="sec" id="regionGlobal" onclick="setOAuthRegion('global',this)">国际</button>
+    </span>
     <button class="sec" onclick="openDesensitizeModal()">屏蔽词设置</button>
     <button id="refreshBtn" onclick="load(true,this)">刷新数据</button>
     <button class="sec" onclick="checkinAll(this)">全部签到</button>
@@ -308,6 +313,41 @@ async function saveKey(){
 }
 function showAuth(){document.getElementById("authBox").style.display="block";const i=document.getElementById("keyInput");i&&i.focus()}
 function authHeaders(k){return k?{"Authorization":"Bearer "+k}:{}}
+/* --- OAuth region switch: writes plugins.configs.workbuddy.oauth_region through
+   CPA's own plugin-config API, so the official OAuth entry
+   (management.html#/oauth) targets the chosen realm. No bespoke login here. --- */
+function markOAuthRegion(region){
+  const cn=document.getElementById("regionCn"), gl=document.getElementById("regionGlobal");
+  if(!cn||!gl) return;
+  const on="outline:2px solid var(--accent,#C4A7E7);font-weight:700";
+  cn.style.cssText=(region!=="global")?on:"";
+  gl.style.cssText=(region==="global")?on:"";
+}
+async function loadOAuthRegion(){
+  if(!getKey()) return;
+  try{
+    const cfg=await managementAPI("/plugins/workbuddy/config");
+    markOAuthRegion((cfg&&cfg.oauth_region)==="global"?"global":"cn");
+  }catch(_){}
+}
+async function setOAuthRegion(region, btn){
+  busy(btn, true);
+  try{
+    await managementAPI("/plugins/workbuddy/config",{
+      method:"PATCH",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({oauth_region:region})
+    });
+    markOAuthRegion(region);
+    toast(region==="global"
+      ? "已切换到国际版：请到 OAuth 页面点登录（workbuddy.ai）"
+      : "已切换到国内版：请到 OAuth 页面点登录（copilot.tencent.com）","ok");
+  }catch(e){
+    toast("切换失败："+((e&&e.message)||""),"err");
+  }finally{
+    busy(btn, false);
+  }
+}
 async function loadEgressIP(){
   const el=document.getElementById("egressIp");
   if(!el||!getKey())return;
@@ -735,6 +775,7 @@ async function load(force, btn){
       ? await api("/refresh", {method:"POST"})
       : await api("/accounts");
     updateModelStatus(d.model_status);
+    loadOAuthRegion();
     if(force&&manualRefresh) loadEgressIP();
     document.getElementById("autoToggle").checked=!!d.checkin_auto;
     document.getElementById("svtime").textContent="服务器时间 "+(d.server_time||"");
